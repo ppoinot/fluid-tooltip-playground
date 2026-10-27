@@ -1,0 +1,756 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Fluid Tooltip Playground</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: the recreated sidebar on a wallpaper stage, a narrow tuning panel beside it; one column on phones */
+:root {
+  --bg: #edf0f5;
+  --surface: #ffffff;
+  --ink: #151c2b;
+  --muted: #5b677d;
+  --line: #d6dce6;
+  --accent: #3156d3;
+  --accent-soft: rgba(49, 86, 211, .10);
+
+  --wall-1: #2d6596;
+  --wall-2: #4a5a7c;
+  --wall-3: #465472;
+  --wall-4: #86a2c0;
+  --pane: rgba(255, 255, 255, .06);
+  --pane-line: rgba(255, 255, 255, .10);
+  --glyph: rgba(255, 255, 255, .78);
+  --glyph-hi: #ffffff;
+  --hl: rgba(255, 255, 255, .13);
+  --stage-ink: rgba(255, 255, 255, .62);
+  --pill: #1c1e23;
+  --pill-ink: #f5f7fb;
+  --pill-sub: rgba(245, 247, 251, .48);
+  --pill-shadow: rgba(10, 15, 30, .30);
+
+  --f-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --f-body: "Geist", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono: "Geist Mono", ui-monospace, Menlo, Consolas, monospace;
+  --f-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e131b; --surface: #151c27; --ink: #e4e9f2; --muted: #8e9bb1; --line: #253043;
+    --accent: #8ca6ff; --accent-soft: rgba(140, 166, 255, .14);
+    --wall-1: #1f4a73; --wall-2: #34425d; --wall-3: #313d56; --wall-4: #5d7896;
+    --pill: #101114; --pill-shadow: rgba(0, 0, 0, .45);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e131b; --surface: #151c27; --ink: #e4e9f2; --muted: #8e9bb1; --line: #253043;
+  --accent: #8ca6ff; --accent-soft: rgba(140, 166, 255, .14);
+  --wall-1: #1f4a73; --wall-2: #34425d; --wall-3: #313d56; --wall-4: #5d7896;
+  --pill: #101114; --pill-shadow: rgba(0, 0, 0, .45);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.55 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 36px 56px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 28px; }
+
+header { display: grid; gap: 6px; max-width: 64ch; }
+h1 {
+  font: 600 clamp(30px, 5vw, 42px)/1.05 var(--f-display);
+  letter-spacing: -.02em;
+  margin: 0;
+  text-wrap: balance;
+}
+header p { margin: 0; color: var(--muted); }
+a { color: var(--accent); text-underline-offset: 3px; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+@media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- stage ---------- */
+.stage {
+  position: relative;
+  height: 460px;
+  border-radius: 16px;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 60% at 0% 100%, var(--wall-4), transparent 60%),
+    linear-gradient(165deg, var(--wall-1) 0%, var(--wall-2) 34%, var(--wall-3) 72%, var(--wall-2) 100%);
+}
+.pane {
+  position: absolute;
+  inset: 0 0 0 34px;
+  background: var(--pane);
+  border-left: 1px solid var(--pane-line);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  backdrop-filter: blur(24px) saturate(1.2);
+}
+.rail {
+  position: absolute;
+  left: 40px;
+  top: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 12px 6px 6px;
+  touch-action: none;
+}
+.item {
+  position: relative;
+  z-index: 1;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  padding: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--glyph);
+  display: grid;
+  place-items: center;
+  cursor: default;
+  transition: color .15s;
+}
+.item:hover, .item[aria-current="page"] { color: var(--glyph-hi); }
+.item:focus-visible { outline: 2px solid var(--glyph-hi); outline-offset: 1px; }
+.item svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.av {
+  width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center;
+  font: 600 9px/1 var(--f-ui); letter-spacing: .02em; color: #fff;
+  background: linear-gradient(140deg, #d9a35c, #7c5a3a);
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .25);
+}
+.hl {
+  position: absolute; left: 6px; top: 0; width: 30px; height: 30px;
+  border-radius: 8px; background: var(--hl);
+  will-change: transform;
+}
+.tip {
+  position: absolute;
+  z-index: 2;
+  left: 50px;
+  top: 0;
+  height: 28px;
+  width: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: left center;
+  will-change: transform, width, opacity;
+}
+.tip-bg {
+  position: absolute; inset: 0;
+  background: var(--pill);
+  border-radius: 9px;
+  box-shadow: 0 8px 22px var(--pill-shadow), inset 0 0 0 .5px rgba(255, 255, 255, .07);
+}
+.tip-label {
+  position: absolute;
+  left: 10px; top: 0; height: 28px;
+  display: inline-flex; align-items: center; gap: 7px;
+  white-space: nowrap;
+  font: 500 12.5px/1 var(--f-ui);
+  color: var(--pill-ink);
+  will-change: transform, opacity, filter;
+}
+.tip-label kbd { font: 500 11.5px/1 var(--f-ui); color: var(--pill-sub); }
+.cursor {
+  position: absolute; z-index: 3; left: 0; top: 0; width: 15px;
+  pointer-events: none; opacity: 0;
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, .35));
+  transition: transform .26s cubic-bezier(.3, .7, .2, 1), opacity .2s;
+}
+.cursor.on { opacity: 1; }
+.stage-foot {
+  position: absolute; left: 54px; right: 16px; bottom: 14px;
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+  color: var(--stage-ink); font: 12px/1.3 var(--f-mono);
+}
+.ghost {
+  font: 500 12px/1 var(--f-body);
+  color: var(--pill-ink);
+  background: rgba(0, 0, 0, .22);
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 999px;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+.ghost:hover { background: rgba(0, 0, 0, .32); }
+.ghost:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* ---------- panel ---------- */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px;
+  display: grid;
+  gap: 20px;
+}
+.group { display: grid; gap: 10px; }
+.eyebrow {
+  font: 500 11px/1 var(--f-mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0;
+}
+.seg {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2px;
+  padding: 3px; border-radius: 10px;
+  background: var(--bg); border: 1px solid var(--line);
+}
+.seg button, .chip {
+  font: 500 13px/1 var(--f-body);
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  padding: 8px 6px;
+  cursor: pointer;
+}
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .08); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); padding: 7px 11px; border-radius: 999px; }
+.chip[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.seg button:focus-visible, .chip:focus-visible, .copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.ctl { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 2px 12px; }
+.ctl label { font-size: 13.5px; }
+.ctl output { font: 500 12.5px/1 var(--f-mono); font-variant-numeric: tabular-nums; color: var(--muted); }
+.ctl input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); margin: 4px 0 0; }
+
+.curve-box { display: grid; gap: 6px; }
+#curve { width: 100%; height: 92px; display: block; }
+.readout { font: 12px/1.4 var(--f-mono); font-variant-numeric: tabular-nums; color: var(--muted); margin: 0; }
+
+.switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13.5px; }
+.switch input { width: 36px; height: 20px; accent-color: var(--accent); }
+.note { margin: 0; font-size: 13px; color: var(--muted); }
+.note button { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
+
+/* ---------- anatomy + code ---------- */
+.anatomy { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
+@media (max-width: 860px) { .anatomy { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .anatomy { grid-template-columns: minmax(0, 1fr); } }
+.anatomy div { display: grid; gap: 4px; align-content: start; border-top: 1px solid var(--line); padding-top: 12px; }
+.anatomy h3 { font: 600 15px/1.3 var(--f-body); margin: 0; }
+.anatomy p { margin: 0; color: var(--muted); font-size: 14px; }
+
+.code { display: grid; gap: 10px; }
+.code-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; flex-wrap: wrap; }
+.code-head p { margin: 0; color: var(--muted); font-size: 14px; max-width: 62ch; }
+.copy {
+  font: 500 13px/1 var(--f-body); color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 12px; cursor: pointer;
+}
+pre {
+  margin: 0; overflow-x: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 16px 18px;
+  font: 12.5px/1.6 var(--f-mono);
+  color: var(--ink);
+}
+
+@media (max-width: 480px) {
+  .stage { height: 400px; }
+}
+</style>
+
+<main class="wrap">
+  <header>
+    <h1>Fluid tooltip</h1>
+    <p>A working copy of the sidebar tooltip from <a href="https://x.com/Anthony99_s/status/2114869597577023821" target="_blank" rel="noopener">Anthony Lorenzo's post</a>, with every spring exposed. Hover the icons, or press Replay.</p>
+  </header>
+
+  <section class="layout">
+    <div class="stage" id="stage">
+      <div class="pane"></div>
+      <nav class="rail" id="rail" aria-label="Sidebar">
+        <span class="hl" id="hl"></span>
+        <button class="item" data-i="0" aria-label="Today" aria-current="page">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M2.5 12h2M19.5 12h2M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>
+        </button>
+        <button class="item" data-i="1" aria-label="Tasks">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
+        </button>
+        <button class="item" data-i="2" aria-label="Calendar">
+          <svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
+        </button>
+        <button class="item" data-i="3" aria-label="Focus">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/></svg>
+        </button>
+        <button class="item" data-i="4" aria-label="Settings">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+        <button class="item" data-i="5" aria-label="John Doe"><span class="av">JD</span></button>
+        <div class="tip" id="tip" aria-hidden="true"><span class="tip-bg"></span></div>
+        <svg class="cursor" id="cursor" viewBox="0 0 15 22" aria-hidden="true"><path d="M1.2 1.2v16.6l4.3-4.1 2.9 6.6 2.7-1.2-2.9-6.4h6z" fill="#111" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/></svg>
+      </nav>
+      <div class="stage-foot">
+        <span id="hint">Hover the icons · 1–5 on the keyboard</span>
+        <button class="ghost" id="replay" type="button">Replay</button>
+      </div>
+    </div>
+
+    <aside class="panel" aria-label="Tuning">
+      <div class="group">
+        <p class="eyebrow">Tooltip</p>
+        <div class="seg" role="group" aria-label="Tooltip mode">
+          <button type="button" id="modeShared" aria-pressed="true">One shared</button>
+          <button type="button" id="modeEach" aria-pressed="false">One per icon</button>
+        </div>
+        <label class="switch" for="slow">Slow motion (×0.2)<input type="checkbox" id="slow"></label>
+        <p class="note" id="rm" hidden>Reduce Motion is on in your system settings. The tooltip animates here anyway, since the motion is what this page shows. <button type="button" id="rmOn">Stop the animation</button></p>
+      </div>
+
+      <div class="group">
+        <p class="eyebrow">Spring</p>
+        <div class="chips" id="presets">
+          <button type="button" class="chip" data-k="260" data-c="24">Fluid</button>
+          <button type="button" class="chip" data-k="520" data-c="40">Snappy</button>
+          <button type="button" class="chip" data-k="320" data-c="13">Bouncy</button>
+          <button type="button" class="chip" data-k="120" data-c="18">Lazy</button>
+        </div>
+        <div class="ctl"><label for="k">Stiffness</label><output id="kOut" for="k"></output><input type="range" id="k" min="60" max="800" step="10" value="260"></div>
+        <div class="ctl"><label for="c">Damping</label><output id="cOut" for="c"></output><input type="range" id="c" min="6" max="60" step="1" value="24"></div>
+        <div class="curve-box">
+          <canvas id="curve" aria-label="Step response of the spring"></canvas>
+          <p class="readout" id="readout"></p>
+        </div>
+      </div>
+
+      <div class="group">
+        <p class="eyebrow">Label</p>
+        <div class="ctl"><label for="roll">Roll distance</label><output id="rollOut" for="roll"></output><input type="range" id="roll" min="0" max="24" step="1" value="10"></div>
+        <div class="ctl"><label for="blur">Blur in motion</label><output id="blurOut" for="blur"></output><input type="range" id="blur" min="0" max="10" step="0.5" value="4"></div>
+      </div>
+
+      <div class="group">
+        <p class="eyebrow">Timing</p>
+        <div class="ctl"><label for="delay">Open delay</label><output id="delayOut" for="delay"></output><input type="range" id="delay" min="0" max="900" step="50" value="300"></div>
+        <div class="ctl"><label for="skip">Skip-delay window</label><output id="skipOut" for="skip"></output><input type="range" id="skip" min="0" max="1500" step="50" value="400"></div>
+      </div>
+    </aside>
+  </section>
+
+  <section class="anatomy" aria-label="What makes it smooth">
+    <div><h3>One pill for every icon</h3><p>The tooltip never closes between icons. The same element glides to the next one on a spring.</p></div>
+    <div><h3>Width follows the label</h3><p>The pill springs to the new label's width, so "Today" stretches into a full name without a jump.</p></div>
+    <div><h3>Text rolls the way you move</h3><p>The old label leaves and the new one arrives from the direction of travel, blurred while it moves.</p></div>
+    <div><h3>It waits only once</h3><p>The first hover waits for the open delay. Along the rail, or coming back within the skip window, it shows at once.</p></div>
+  </section>
+
+  <section class="code">
+    <div class="code-head">
+      <p>The same values in Framer Motion. Its springs use a mass of 1 by default, like this page, so the numbers carry over as they are.</p>
+      <button class="copy" id="copy" type="button">Copy code</button>
+    </div>
+    <pre id="code"></pre>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const DATA = [
+    { name: "Today", key: "1" }, { name: "Tasks", key: "2" }, { name: "Calendar", key: "3" },
+    { name: "Focus", key: "4" }, { name: "Settings", key: "5" }, { name: "John Doe", key: null },
+  ];
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  const MOD = isMac ? "⌘" : "Ctrl ";
+  const H = 28, PAD = 10;
+
+  const P = { k: 260, c: 24, roll: 10, blur: 4, delay: 300, skip: 400, shared: true, slow: false };
+
+  const rail = $("#rail"), tip = $("#tip"), hl = $("#hl"), cursor = $("#cursor");
+  const items = [...rail.querySelectorAll(".item")];
+  let centers = [];
+  const measure = () => { centers = items.map((el) => el.offsetTop + el.offsetHeight / 2); };
+
+  class Spring {
+    constructor(x) { this.x = x; this.t = x; this.v = 0; }
+    snap(x) { this.x = this.t = x; this.v = 0; }
+    step(h, k, c) { const a = -k * (this.x - this.t) - c * this.v; this.v += a * h; this.x += this.v * h; }
+    done(eps) { return Math.abs(this.x - this.t) < eps && Math.abs(this.v) < eps * 10; }
+  }
+
+  const reduceQuery = matchMedia("(prefers-reduced-motion: reduce)");
+  // The motion is what this page shows, so it animates even with Reduce Motion on (the panel offers a way out)
+  let reduce = false;
+
+  const y = new Spring(0), w = new Spring(0), vis = new Spring(0), aY = new Spring(0);
+  let labels = [];
+  let cur = -1, active = 0, shown = false, hiddenAt = -1e9, openT = 0, hideT = 0, pending = 0;
+
+  // ---------- labels ----------
+  function labelEl(i) {
+    const d = DATA[i];
+    const el = document.createElement("span");
+    el.className = "tip-label";
+    const n = document.createElement("span");
+    n.textContent = d.name;
+    el.append(n);
+    if (d.key) { const k = document.createElement("kbd"); k.textContent = MOD + d.key; el.append(k); }
+    tip.append(el);
+    return el;
+  }
+  function replaceLabel(i) {
+    labels.forEach((l) => l.el.remove());
+    const el = labelEl(i);
+    labels = [{ el, p: new Spring(0), out: false }];
+    return el.offsetWidth + PAD * 2;
+  }
+  function rollLabel(i, dir) {
+    labels.forEach((l) => { if (!l.out) { l.out = true; l.p.t = -dir; } });
+    const el = labelEl(i);
+    const p = new Spring(dir);
+    p.t = 0;
+    labels.push({ el, p, out: false });
+    return el.offsetWidth + PAD * 2;
+  }
+
+  // ---------- state machine ----------
+  function moveTo(i) {
+    vis.t = 1;
+    if (i === cur) return;
+    const dir = Math.sign(i - cur) || 1;
+    cur = i;
+    if (P.shared && !reduce) {
+      y.t = centers[i];
+      w.t = rollLabel(i, dir);
+    } else {
+      y.snap(centers[i]);
+      w.snap(replaceLabel(i));
+      if (!P.shared && !reduce) vis.snap(0);
+    }
+    kick();
+  }
+  function open(i) {
+    shown = true;
+    if (vis.x < 0.05 || cur < 0) {
+      cur = i;
+      y.snap(centers[i]);
+      w.snap(replaceLabel(i));
+      vis.t = 1;
+    } else {
+      moveTo(i);
+    }
+    kick();
+  }
+  function hover(i, immediate) {
+    clearTimeout(hideT);
+    if (shown) { moveTo(i); return; }
+    pending = i;
+    if (immediate || performance.now() - hiddenAt < P.skip) {
+      clearTimeout(openT); openT = 0;
+      open(pending);
+      return;
+    }
+    if (!openT) openT = setTimeout(() => { openT = 0; open(pending); }, P.delay * (P.slow ? 5 : 1));
+  }
+  function hide() {
+    if (!shown) return;
+    shown = false;
+    hiddenAt = performance.now();
+    vis.t = 0;
+    kick();
+  }
+  function scheduleHide(ms) {
+    clearTimeout(openT); openT = 0;
+    clearTimeout(hideT);
+    hideT = setTimeout(hide, ms);
+  }
+  function setActive(i) {
+    if (i > 4) return;
+    active = i;
+    items.forEach((el, j) => el.toggleAttribute("aria-current", j === i));
+    items[i].setAttribute("aria-current", "page");
+    if (reduce) aY.snap(centers[i]); else aY.t = centers[i];
+    kick();
+  }
+
+  // ---------- animation loop ----------
+  let raf = 0, last = 0;
+  function kick() { if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } }
+  function step(h) {
+    const { k, c } = P;
+    y.step(h, k, c); w.step(h, k, c); aY.step(h, k, c);
+    vis.step(h, 420, 38);
+    labels.forEach((l) => l.p.step(h, k, c));
+  }
+  function frame(now) {
+    let dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (P.slow) dt *= 0.2;
+    if (reduce) {
+      [y, w, aY, vis].forEach((s) => s.snap(s.t));
+      labels.forEach((l) => l.p.snap(l.p.t));
+    } else {
+      const n = Math.max(1, Math.ceil(dt / (1 / 240)));
+      for (let s = 0; s < n; s++) step(dt / n);
+    }
+    render();
+    const settled = y.done(0.05) && w.done(0.05) && aY.done(0.05) && vis.done(0.002)
+      && labels.every((l) => !l.out && l.p.done(0.002));
+    if (settled) { raf = 0; return; }
+    raf = requestAnimationFrame(frame);
+  }
+  function render() {
+    const vv = Math.min(1, Math.max(0, vis.x));
+    tip.style.opacity = vv.toFixed(3);
+    tip.style.transform = `translate3d(${(-5 * (1 - vv)).toFixed(2)}px, ${(y.x - H / 2).toFixed(2)}px, 0) scale(${(0.95 + 0.05 * vv).toFixed(4)})`;
+    tip.style.width = Math.max(0, w.x).toFixed(2) + "px";
+    hl.style.transform = `translate3d(0, ${(aY.x - 15).toFixed(2)}px, 0)`;
+    labels = labels.filter((l) => {
+      if (l.out && (Math.abs(l.p.x) >= 0.97 || l.p.done(0.002))) { l.el.remove(); return false; }
+      return true;
+    });
+    labels.forEach((l) => {
+      const a = Math.abs(l.p.x);
+      l.el.style.opacity = Math.max(0, 1 - a).toFixed(3);
+      l.el.style.transform = `translate3d(0, ${(l.p.x * P.roll).toFixed(2)}px, 0)`;
+      l.el.style.filter = P.blur > 0 && a > 0.002 ? `blur(${(Math.min(1, a) * P.blur).toFixed(2)}px)` : "none";
+    });
+  }
+
+  // ---------- input ----------
+  const indexAt = (clientY) => {
+    const yy = clientY - rail.getBoundingClientRect().top;
+    let best = 0, bd = Infinity;
+    centers.forEach((c, i) => { const d = Math.abs(c - yy); if (d < bd) { bd = d; best = i; } });
+    return best;
+  };
+  rail.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") { stopDemo(); hover(indexAt(e.clientY), false); } });
+  rail.addEventListener("pointermove", (e) => {
+    if (e.pointerType !== "mouse" && e.buttons === 0) return;
+    stopDemo();
+    hover(indexAt(e.clientY), e.pointerType !== "mouse");
+  });
+  rail.addEventListener("pointerdown", (e) => {
+    stopDemo();
+    if (e.pointerType !== "mouse") hover(indexAt(e.clientY), true);
+  });
+  rail.addEventListener("pointerleave", (e) => scheduleHide(e.pointerType === "mouse" ? 80 : 900));
+  rail.addEventListener("pointerup", (e) => { if (e.pointerType !== "mouse") scheduleHide(900); });
+  items.forEach((el, i) => el.addEventListener("click", () => setActive(i)));
+  rail.addEventListener("focusin", (e) => {
+    const el = e.target.closest(".item");
+    if (el && el.matches(":focus-visible")) { stopDemo(); hover(+el.dataset.i, true); }
+  });
+  rail.addEventListener("focusout", (e) => { if (!rail.contains(e.relatedTarget)) scheduleHide(80); });
+  addEventListener("keydown", (e) => {
+    if (e.target.closest && e.target.closest("input, textarea, select")) return;
+    const n = parseInt(e.key, 10);
+    if (n >= 1 && n <= 5) {
+      if (e.metaKey || e.ctrlKey) e.preventDefault();
+      stopDemo();
+      setActive(n - 1);
+      hover(n - 1, true);
+      scheduleHide(1000);
+    }
+  });
+
+  // ---------- demo (the clip's path along the rail) ----------
+  let demoT = [];
+  function stopDemo() {
+    if (!demoT.length) return;
+    demoT.forEach(clearTimeout);
+    demoT = [];
+    cursor.classList.remove("on");
+  }
+  function placeCursor(i) {
+    cursor.style.transform = `translate(${21 + 3}px, ${centers[i] + 3}px)`;
+  }
+  function playDemo() {
+    stopDemo();
+    const f = P.slow ? 5 : 1;
+    const path = [[5, 0], [4, 600], [0, 1250], [1, 1600], [2, 1900], [3, 2200], [4, 2500], [5, 2850], [0, 3600]];
+    placeCursor(5);
+    cursor.classList.add("on");
+    path.forEach(([i, at]) => demoT.push(setTimeout(() => { placeCursor(i); hover(i, true); }, at * f)));
+    demoT.push(setTimeout(() => { cursor.classList.remove("on"); demoT = []; }, 4400 * f));
+  }
+  $("#replay").addEventListener("click", playDemo);
+
+  // ---------- panel ----------
+  const fmt = {
+    k: (v) => v, c: (v) => v, roll: (v) => v + " px", blur: (v) => v + " px",
+    delay: (v) => v + " ms", skip: (v) => v + " ms",
+  };
+  Object.keys(fmt).forEach((id) => {
+    const input = $("#" + id), out = $("#" + id + "Out");
+    const sync = () => { P[id] = +input.value; out.textContent = fmt[id](P[id]); onChange(); };
+    input.addEventListener("input", sync);
+    out.textContent = fmt[id](+input.value);
+  });
+  const presets = [...document.querySelectorAll("#presets .chip")];
+  presets.forEach((b) => b.addEventListener("click", () => {
+    P.k = +b.dataset.k; P.c = +b.dataset.c;
+    $("#k").value = P.k; $("#c").value = P.c;
+    $("#kOut").textContent = P.k; $("#cOut").textContent = P.c;
+    onChange();
+    playDemo();
+  }));
+  const setMode = (shared) => {
+    P.shared = shared;
+    $("#modeShared").setAttribute("aria-pressed", shared);
+    $("#modeEach").setAttribute("aria-pressed", !shared);
+    playDemo();
+  };
+  $("#modeShared").addEventListener("click", () => setMode(true));
+  $("#modeEach").addEventListener("click", () => setMode(false));
+  $("#slow").addEventListener("change", (e) => { P.slow = e.target.checked; });
+
+  const rm = $("#rm"), rmOn = $("#rmOn");
+  const syncReduce = () => {
+    rm.hidden = !reduceQuery.matches;
+    rmOn.textContent = reduce ? "Animate again" : "Stop the animation";
+  };
+  rmOn.addEventListener("click", () => { reduce = !reduce; syncReduce(); if (!reduce) playDemo(); });
+  reduceQuery.addEventListener("change", syncReduce);
+
+  function onChange() {
+    presets.forEach((b) => b.setAttribute("aria-pressed", +b.dataset.k === P.k && +b.dataset.c === P.c));
+    drawCurve();
+    $("#code").textContent = code();
+  }
+
+  // ---------- step response ----------
+  const cv = $("#curve");
+  function simulate() {
+    const dt = 1 / 600, T = 2.5;
+    let x = 0, v = 0, peak = 0, settle = 0;
+    const pts = [];
+    for (let t = 0; t <= T; t += dt) {
+      const a = -P.k * (x - 1) - P.c * v;
+      v += a * dt; x += v * dt;
+      pts.push([t, x]);
+      if (x > peak) peak = x;
+      if (Math.abs(x - 1) > 0.01) settle = t;
+    }
+    return { pts, peak, settle };
+  }
+  function drawCurve() {
+    const css = getComputedStyle(document.documentElement);
+    const col = (n) => css.getPropertyValue(n).trim();
+    const dpr = devicePixelRatio || 1;
+    const W = cv.clientWidth, Ht = cv.clientHeight;
+    if (!W) return;
+    cv.width = W * dpr; cv.height = Ht * dpr;
+    const g = cv.getContext("2d");
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, W, Ht);
+    const { pts, peak, settle } = simulate();
+    const win = Math.min(2.5, Math.max(0.3, Math.ceil(settle * 1.3 * 10) / 10));
+    const top = Math.max(1.08, peak + 0.04);
+    const L = 2, R = W - 4, T = 6, B = Ht - 18;
+    const sx = (t) => L + (t / win) * (R - L);
+    const sy = (v) => B - (v / top) * (B - T);
+
+    g.font = `11px ${col("--f-mono")}`;
+    g.fillStyle = col("--muted");
+    g.textBaseline = "alphabetic";
+    g.textAlign = "left"; g.fillText("0", L, Ht - 4);
+    g.textAlign = "right"; g.fillText(Math.round(win * 1000) + " ms", R, Ht - 4);
+
+    g.strokeStyle = col("--line"); g.lineWidth = 1;
+    g.beginPath(); g.moveTo(L, B + 0.5); g.lineTo(R, B + 0.5); g.stroke();
+    g.setLineDash([3, 3]);
+    g.strokeStyle = col("--muted");
+    g.beginPath(); g.moveTo(L, Math.round(sy(1)) + 0.5); g.lineTo(R, Math.round(sy(1)) + 0.5); g.stroke();
+    g.setLineDash([]);
+
+    const shown = pts.filter(([t]) => t <= win);
+    g.beginPath();
+    shown.forEach(([t, v], i) => (i ? g.lineTo(sx(t), sy(v)) : g.moveTo(sx(t), sy(v))));
+    const lastPt = shown[shown.length - 1];
+    g.lineTo(sx(lastPt[0]), B); g.lineTo(sx(0), B); g.closePath();
+    g.fillStyle = col("--accent-soft"); g.fill();
+    g.beginPath();
+    shown.forEach(([t, v], i) => (i ? g.lineTo(sx(t), sy(v)) : g.moveTo(sx(t), sy(v))));
+    g.strokeStyle = col("--accent"); g.lineWidth = 2; g.stroke();
+    g.beginPath(); g.arc(sx(settle), sy(1), 3.5, 0, Math.PI * 2);
+    g.fillStyle = col("--accent"); g.fill();
+
+    const zeta = P.c / (2 * Math.sqrt(P.k));
+    const over = Math.max(0, (peak - 1) * 100);
+    $("#readout").textContent = `settles in ${Math.round(settle * 1000)} ms · overshoot ${over.toFixed(1)} % · ζ ${zeta.toFixed(2)}`;
+  }
+
+  // ---------- code ----------
+  function code() {
+    const spring = `{ type: "spring", stiffness: ${P.k}, damping: ${P.c} }`;
+    return `// One pill for every icon: animate its position and width
+<motion.div
+  className="tooltip"
+  animate={{ y: centerY - ${H / 2}, width: labelWidth + ${PAD * 2} }}
+  transition={${spring}}
+>
+  {/* The label rolls in the direction of travel (dir = +1 down, -1 up) */}
+  <AnimatePresence mode="popLayout" custom={dir} initial={false}>
+    <motion.span
+      key={label}
+      custom={dir}
+      variants={{
+        enter: (d) => ({ y: ${P.roll} * d, opacity: 0, filter: "blur(${P.blur}px)" }),
+        center: { y: 0, opacity: 1, filter: "blur(0px)" },
+        exit: (d) => ({ y: -${P.roll} * d, opacity: 0, filter: "blur(${P.blur}px)" }),
+      }}
+      initial="enter"
+      animate="center"
+      exit="exit"
+      transition={${spring}}
+    >
+      {label} <kbd>{shortcut}</kbd>
+    </motion.span>
+  </AnimatePresence>
+</motion.div>
+
+// Wait once, then follow the pointer at once (Radix names for the same timing)
+<Tooltip.Provider delayDuration={${P.delay}} skipDelayDuration={${P.skip}}>`;
+  }
+  $("#copy").addEventListener("click", () => {
+    const btn = $("#copy"), text = $("#code").textContent;
+    const done = (msg) => { btn.textContent = msg; setTimeout(() => { btn.textContent = "Copy code"; }, 1400); };
+    const fallback = () => {
+      const r = document.createRange(); r.selectNodeContents($("#code"));
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      done("Selected, press ⌘C");
+    };
+    try { navigator.clipboard.writeText(text).then(() => done("Copied"), fallback); } catch (_) { fallback(); }
+  });
+
+  // ---------- boot ----------
+  $("#hint").textContent = `Hover the icons · ${MOD}1–5 or 1–5`;
+  measure();
+  aY.snap(centers[0]);
+  open(0);
+  vis.snap(1);
+  render();
+  syncReduce();
+  onChange();
+  new ResizeObserver(() => {
+    measure();
+    if (cur >= 0) y.snap(centers[cur]);
+    aY.snap(centers[active]);
+    render();
+    drawCurve();
+  }).observe(rail);
+  new ResizeObserver(drawCurve).observe(cv);
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawCurve);
+  new MutationObserver(drawCurve).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  if (!reduce) setTimeout(() => { if (!shown || cur === 0) playDemo(); }, 900);
+})();
+</script>
+
+</body></html>
